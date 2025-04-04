@@ -1,0 +1,22 @@
+
+# 系统文件
+.DS_Store
+.CFUserTextEncoding
+.hugo_build.lock
+
+# 开发环境
+node_modules/
+.idea/
+.vscode/
+
+# 密钥文件
+.ssh/
+*.pem
+
+# 用户目录
+Desktop/
+Documents/
+Downloads/
+Movies/
+Music/
+Pictures/
