@@ -2,11 +2,356 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AR洪水导航</title>
-    <link rel="stylesheet" href="styles/main.css">
+    <title>AR Flood Navigation / AR洪水导航</title>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        #ar-container {
+            position: fixed;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+
+        .ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* 语言切换按钮 */
+        .lang-toggle {
+            position: fixed;
+            top: 5rem;
+            right: 5rem;
+            z-index: 1001;
+            background: rgba(0, 0, 0, 0.9);
+            color: #00FFBB;
+            border: 1px solid rgba(0, 255, 187, 0.3);
+            border-radius: 8px;
+            padding: 0.6rem 5rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(4px);
+            pointer-events: auto;
+        }
+
+        .lang-toggle:hover {
+            background: rgba(0, 255, 187, 0.1);
+            transform: translateY(-1px);
+        }
+
+        /* 信息面板 */
+        .info-panel {
+            background: rgba(12, 80, 160, 0.6);
+            border-radius: 16px;
+            padding: 1.8rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+            margin: 0;
+        }
+
+        .status-header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .control-footer {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .data-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            padding: 12px;
+            background: rgba(8, 60, 120, 0.3);
+            border-radius: 10px;
+            flex: 1;
+        }
+
+        .data-label {
+            color: #E6F7FF;
+            font-size: 0.95rem;
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        .data-value {
+            color: #B4F8FF;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0,40,80,0.5);
+        }
+
+        .navigation-guidance {
+            position: absolute;
+            bottom: 40%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(90%, 420px);
+            text-align: center;
+        }
+
+        .progress-track {
+            height: 8px;
+            background: rgba(255,255,255,0.12);
+            border-radius: 4px;
+            margin-top: 0.8rem;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00FFBB 0%, #00A3FF 100%);
+            transition: width 0.25s ease;
+        }
+
+        /* 紧急求助按钮 */
+        .emergency-btn {
+            position: fixed;
+            bottom: 180px; /* 调整后的位置 */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1002;
+            background: rgba(255, 50, 50, 0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            border: 2px solid rgba(255,255,255,0.3);
+            font-size: 1.1rem;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255,50,50,0.3);
+            transition: all 0.3s ease;
+            pointer-events: auto !important; /* 关键修复 */
+        }
+
+        @keyframes pulse {
+            0% { transform: translateY(0); opacity: 0.4; }
+            50% { transform: translateY(-8px); opacity: 0.2; }
+            100% { transform: translateY(0); opacity: 0.4; }
+        }
+    </style>
 </head>
+
 <body>
-    <h1>洪水导航系统已启动</h1>
-    <script src="scripts/app.js"></script>
+    <button class="lang-toggle" id="langToggle">EN/中</button>
+
+    <div id="ar-container">
+        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+            <a-camera></a-camera>
+        </a-scene>
+    </div>
+
+    <div class="ui-overlay">
+        <div class="info-panel status-header">
+            <div class="data-group">
+                <span class="data-label" data-i18n="currentAltitude">实时海拔高度</span>
+                <span class="data-value" id="current-alt">0.0 m</span>
+                <div class="progress-track">
+                    <div class="progress-fill" id="alt-progress"></div>
+                </div>
+            </div>
+            <div class="data-group">
+                <span class="data-label" data-i18n="safeHeight">安全基准高度</span>
+                <span class="data-value" id="safe-alt">10.0 m</span>
+                <span class="data-label" data-i18n="heightDiff">高度差</span>
+                <span class="data-value" id="alt-diff">+5.2 m</span>
+            </div>
+        </div>
+
+        <div class="navigation-guidance">
+            <svg width="90" height="90" viewBox="0 0 24 24" style="filter: drop-shadow(0 0 20px rgba(180, 219, 255, 0.3));">
+                <path fill="rgba(180, 248, 255, 0.6)" 
+                      d="M11 5.414V17h2V5.414l4.293 4.293 1.414-1.414L12 1.586 5.293 8.293l1.414 1.414z"/>
+                <path fill="rgba(100, 220, 255, 0.4)" 
+                      d="M12 3.101l-6 6v3l6-6 6 6v-3z"
+                      style="transform-origin: center; animation: pulse 1.5s infinite;">
+            </svg>
+            <div class="data-label" data-i18n="guidance" style="margin-top: 1rem; opacity: 0.9;">安全路线指引</div>
+        </div>
+
+        <div class="info-panel control-footer">
+            <div class="data-group">
+                <span class="data-label" data-i18n="floodLevel">洪水预测水位</span>
+                <span class="data-value" id="flood-level">7.8 m</span>
+            </div>
+            <div class="data-group">
+                <span class="data-label" data-i18n="location">当前位置坐标</span>
+                <span class="data-value" id="gps-coords">-33.8951, 151.2452</span>
+            </div>
+        </div>
+
+        <button class="emergency-btn" id="emergencyBtn" data-i18n="emergencyBtn">⚠️ 紧急求助</button>
+    </div>
+
+    <script>
+    const translations = {
+        en: {
+            currentAltitude: "Current Altitude",
+            safeHeight: "Safety Level",
+            heightDiff: "Height Difference",
+            floodLevel: "Predicted Flood",
+            location: "Coordinates",
+            guidance: "Safe Route Guidance",
+            emergencyBtn: "⚠️ Emergency SOS",
+            units: {
+                meter: "m",
+                meters: "m"
+            },
+            noLocation: "Location unavailable",
+            copiedAlert: "Location copied!"
+        },
+        zh: {
+            currentAltitude: "实时海拔高度",
+            safeHeight: "安全基准高度",
+            heightDiff: "高度差",
+            floodLevel: "洪水预测水位",
+            location: "当前位置坐标",
+            guidance: "安全路线指引",
+            emergencyBtn: "⚠️ 紧急求助",
+            units: {
+                meter: "米",
+                meters: "米"
+            },
+            noLocation: "无法获取位置",
+            copiedAlert: "位置已复制！"
+        }
+    };
+
+    class NavigationSystem {
+        constructor() {
+            this.currentLang = 'zh';
+            this.lastPosition = null;
+            this.FLOOD_BASE_LEVEL = 7.8;
+            this.safeHeight = this.FLOOD_BASE_LEVEL + 3.0;
+            this.init();
+        }
+
+        init() {
+            this.initLanguage();
+            this.setupGeolocation();
+            this.setupEventListeners();
+            this.startUpdateLoop();
+        }
+
+        initLanguage() {
+            document.getElementById('langToggle').addEventListener('click', () => {
+                this.currentLang = this.currentLang === 'en' ? 'zh' : 'en';
+                this.updateTranslations();
+                this.updateInterface();
+            });
+            this.updateTranslations();
+        }
+
+        updateTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.textContent = this.getTranslation(key);
+            });
+        }
+
+        getTranslation(key) {
+            return translations[this.currentLang][key] || key;
+        }
+
+        setupEventListeners() {
+            const emergencyBtn = document.getElementById('emergencyBtn');
+            if (emergencyBtn) {
+                emergencyBtn.addEventListener('click', () => this.shareLocation());
+            }
+        }
+
+        setupGeolocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(
+                    position => {
+                        this.lastPosition = position;
+                        this.updateInterface();
+                    },
+                    error => console.error('定位错误:', error),
+                    { enableHighAccuracy: true }
+                );
+            }
+        }
+
+        startUpdateLoop() {
+            setInterval(() => {
+                if (this.lastPosition) {
+                    const alt = this.lastPosition.coords.altitude || 0;
+                    const diff = alt - this.safeHeight;
+                    document.getElementById('alt-diff').textContent = 
+                        `${diff >= 0 ? '+' : '-'}${Math.abs(diff).toFixed(1)} ${this.getTranslation('m')}`;
+                    
+                    const progress = Math.min(Math.max(alt / this.safeHeight * 100, 0), 100);
+                    document.getElementById('alt-progress').style.width = `${progress}%`;
+                }
+            }, 1000);
+        }
+
+        updateInterface() {
+            if (!this.lastPosition) return;
+            
+            const coords = this.lastPosition.coords;
+            document.getElementById('current-alt').textContent = 
+                `${coords.altitude?.toFixed(1) || '0.0'} ${this.getTranslation('m')}`;
+            
+            document.getElementById('safe-alt').textContent = 
+                `${this.safeHeight.toFixed(1)} ${this.getTranslation('m')}`;
+            
+            document.getElementById('gps-coords').textContent = 
+                `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+        }
+
+        shareLocation() {
+            if (!this.lastPosition) {
+                alert(this.getTranslation('noLocation'));
+                return;
+            }
+            
+            const coords = this.lastPosition.coords;
+            const message = `${this.getTranslation('emergencyMessage')}:\n
+                ${this.getTranslation('latitude')}: ${coords.latitude.toFixed(4)}\n
+                ${this.getTranslation('longitude')}: ${coords.longitude.toFixed(4)}\n
+                ${this.getTranslation('altitude')}: ${coords.altitude?.toFixed(1) || 'N/A'}m`;
+
+            if (navigator.share) {
+                navigator.share({
+                    title: '🚨 ' + this.getTranslation('emergencyAlert'),
+                    text: message
+                });
+            } else {
+                navigator.clipboard.writeText(message);
+                alert(this.getTranslation('copiedAlert'));
+            }
+        }
+    }
+
+    // 初始化系统
+    new NavigationSystem();
+    </script>
 </body>
 </html>
